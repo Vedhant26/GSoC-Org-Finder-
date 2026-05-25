@@ -2510,37 +2510,80 @@
     if (!container) return;
     container.innerHTML = '';
     
-    compareList.forEach(name => {
-      const org = ORGS.find(o => o.name === name);
-      const githubOwner = githubOwnerFromValue(org.github);
-      const logoUrl = githubOwner ? `https://github.com/${githubOwner}.png?size=80` : '';
-      
+    const allOrgNames = ORGS.map(o => o.name).sort();
+    
+    for (let i = 0; i < 3; i++) {
+      const name = compareList[i];
       const item = document.createElement('div');
-      item.className = 'bg-white rounded-xl p-4 border border-zinc-100';
-      item.innerHTML = `
-        <div class="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center mx-auto mb-3 overflow-hidden">
-          <img src="${escapeHtml(logoUrl)}" data-org-name="${escapeHtml(org.name)}" class="w-full h-full object-contain" />
-        </div>
-        <p class="font-bold text-sm truncate">${escapeHtml(org.name)}</p>
-        <p class="text-[10px] text-zinc-500 font-label uppercase mt-1">${escapeHtml(String(org.years))}y · ${escapeHtml(org.competition)}</p>
-        <button data-compare-org="${escapeHtml(org.name)}" class="text-[9px] text-red-500 font-bold uppercase mt-2 hover:underline">Remove</button>
-      `;
-      container.appendChild(item);
-      attachOrgCardListeners(item);
-    });
-
-    // Add empty slots
-    for (let i = compareList.length; i < 3; i++) {
-      const empty = document.createElement('div');
-      empty.className = 'bg-white rounded-xl p-4 border border-zinc-100 border-dashed border-zinc-300 flex flex-col items-center justify-center opacity-50';
-      empty.innerHTML = `
-        <div class="w-10 h-10 rounded-lg bg-zinc-100 flex items-center justify-center mb-3"><span class="material-symbols-outlined text-zinc-400">add</span></div>
-        <p class="font-bold text-sm text-zinc-400">Add org</p>
-        <p class="text-[10px] text-zinc-400 font-label uppercase mt-1">Slot ${i+1}</p>
-      `;
-      container.appendChild(empty);
+      
+      if (name) {
+        const org = ORGS.find(o => o.name === name);
+        const githubOwner = githubOwnerFromValue(org.github);
+        const logoUrl = githubOwner ? `https://github.com/${githubOwner}.png?size=80` : '';
+        
+        item.className = 'bg-white rounded-xl p-4 border border-zinc-100 relative group flex flex-col items-center justify-center';
+        item.innerHTML = `
+          <div class="absolute top-2 right-2">
+            <button data-compare-org="${escapeHtml(org.name)}" class="text-zinc-300 hover:text-red-500 transition-colors bg-white rounded-full bg-opacity-75" title="Remove">
+              <span class="material-symbols-outlined text-sm">close</span>
+            </button>
+          </div>
+          <div class="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center mx-auto mb-3 overflow-hidden">
+            <img src="${escapeHtml(logoUrl)}" data-org-name="${escapeHtml(org.name)}" class="w-full h-full object-contain" />
+          </div>
+          <p class="font-bold text-sm truncate w-full text-center">${escapeHtml(org.name)}</p>
+          <p class="text-[10px] text-zinc-500 font-label uppercase mt-1 mb-2">${escapeHtml(String(org.years))}y · ${escapeHtml(org.competition)}</p>
+          <div class="w-full px-2 mt-auto">
+            <select class="w-full text-[10px] sm:text-xs border-zinc-200 bg-zinc-50 rounded-md focus:ring-primary focus:border-primary p-1 cursor-pointer" onchange="window.handleCompareSlotChange(${i}, this)">
+                <option value="" disabled>Change org...</option>
+                ${allOrgNames.map(opt => `
+                   <option value="${escapeHtml(opt)}" ${opt === name ? 'selected' : (compareList.includes(opt) ? 'disabled' : '')}>${escapeHtml(opt)}</option>
+                `).join('')}
+            </select>
+          </div>
+        `;
+        container.appendChild(item);
+        attachOrgCardListeners(item);
+      } else {
+        item.className = 'bg-white rounded-xl p-4 border border-zinc-100 border-dashed border-zinc-300 flex flex-col items-center justify-center bg-opacity-50 transition-all hover:bg-zinc-50';
+        item.innerHTML = `
+          <div class="w-10 h-10 rounded-lg bg-zinc-100 flex items-center justify-center mb-3"><span class="material-symbols-outlined text-zinc-400">add</span></div>
+          <p class="text-[10px] text-zinc-400 font-label uppercase mb-2">Slot ${i+1}</p>
+          <div class="w-full px-2 mt-auto">
+            <select class="w-full text-xs border-zinc-200 bg-white rounded-md focus:ring-primary focus:border-primary p-1.5 cursor-pointer shadow-sm" onchange="window.handleCompareSlotChange(${i}, this)">
+                <option value="" selected>Search & add...</option>
+                ${allOrgNames.map(opt => `
+                   <option value="${escapeHtml(opt)}" ${compareList.includes(opt) ? 'disabled' : ''}>${escapeHtml(opt)}</option>
+                `).join('')}
+            </select>
+          </div>
+        `;
+        container.appendChild(item);
+      }
     }
   }
+
+  window.handleCompareSlotChange = function(slotIndex, selectEl) {
+    const newOrgName = selectEl.value;
+    const currentOrg = compareList[slotIndex];
+    if (!newOrgName) {
+      if (currentOrg) {
+        compareList.splice(slotIndex, 1);
+      }
+    } else {
+      if (currentOrg) {
+        compareList.splice(slotIndex, 1, newOrgName);
+      } else {
+        compareList.push(newOrgName);
+      }
+    }
+    const unique = [...new Set(compareList)].filter(Boolean);
+    compareList.length = 0;
+    compareList.push(...unique);
+    renderCompare();
+    renderCompareModal();
+    if (typeof renderOrgs === 'function') renderOrgs(false);
+  };
 
   function renderCompareModal() {
     const body = document.getElementById('compareModalBody');
@@ -2553,16 +2596,7 @@
       .replaceAll("'", '&#39;');
 
     const selectedOrgs = compareList.map(name => ORGS.find(o => o.name === name)).filter(Boolean);
-    if (selectedOrgs.length < 2) {
-      body.innerHTML = `
-        <div class="py-12 text-center border-2 border-dashed border-zinc-200 rounded-2xl">
-          <span class="material-symbols-outlined text-4xl text-zinc-300 mb-3">compare_arrows</span>
-          <p class="font-bold text-zinc-700">Select at least 2 organizations to compare.</p>
-          <p class="text-sm text-zinc-500 mt-2">Use the Compare button on organization cards, then open this tool again.</p>
-        </div>
-      `;
-      return;
-    }
+    const slots = [0, 1, 2].map(i => selectedOrgs[i] || null);
 
     const rows = [
       ['Category', org => org.cat],
@@ -2575,19 +2609,36 @@
       ['Repository', org => org.github],
     ];
 
+    const allOrgNames = ORGS.map(o => o.name).sort();
+
     body.innerHTML = `
-      <table class="w-full min-w-[720px] text-sm">
+      <table class="w-full min-w-[720px] text-sm table-fixed">
         <thead>
           <tr class="border-b border-zinc-200">
-            <th class="text-left py-3 px-4 text-xs uppercase tracking-widest text-zinc-400">Metric</th>
-            ${selectedOrgs.map(org => `<th class="text-left py-3 px-4 font-bold">${escapeHtml(org.name)}</th>`).join('')}
+            <th class="text-left py-3 px-4 text-xs uppercase tracking-widest text-zinc-400 w-[150px]">Metric</th>
+            ${slots.map((org, i) => `
+              <th class="text-left py-3 px-4 font-bold w-[250px]">
+                <select class="w-full text-sm border-zinc-200 bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 rounded-md focus:ring-primary focus:border-primary p-2 cursor-pointer font-normal" onchange="window.handleCompareSlotChange(${i}, this)">
+                  <option value="">-- Select Org --</option>
+                  ${allOrgNames.map(name => `
+                     <option value="${escapeHtml(name)}" ${org && org.name === name ? 'selected' : ''} ${!org && compareList.includes(name) ? 'disabled' : ''}>
+                       ${escapeHtml(name)}
+                     </option>
+                  `).join('')}
+                </select>
+              </th>
+            `).join('')}
           </tr>
         </thead>
         <tbody>
           ${rows.map(([label, getValue]) => `
-            <tr class="border-b border-zinc-100 last:border-0">
+            <tr class="border-b border-zinc-100 last:border-0 dark:border-zinc-700">
               <td class="py-3 px-4 font-bold text-zinc-500">${label}</td>
-              ${selectedOrgs.map(org => `<td class="py-3 px-4 text-zinc-700">${escapeHtml(getValue(org))}</td>`).join('')}
+              ${slots.map(org => `
+                <td class="py-3 px-4 text-zinc-700 dark:text-zinc-300">
+                  ${org ? escapeHtml(getValue(org)) : '<span class="text-zinc-300 dark:text-zinc-600">-</span>'}
+                </td>
+              `).join('')}
             </tr>
           `).join('')}
         </tbody>
