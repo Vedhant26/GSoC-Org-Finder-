@@ -2495,11 +2495,17 @@
     if (idx > -1) {
       compareList.splice(idx, 1);
     } else {
-      if (compareList.length >= 3) {
+      const selectedCount = compareList.filter(Boolean).length;
+      if (selectedCount >= 3) {
         alert("You can only compare up to 3 organizations at a time.");
         return;
       }
-      compareList.push(name);
+      const emptySlotIndex = compareList.findIndex(entry => !entry);
+      if (emptySlotIndex >= 0) {
+        compareList[emptySlotIndex] = name;
+      } else {
+        compareList.push(name);
+      }
     }
     renderOrgs(true);
     renderCompare();
@@ -2566,20 +2572,18 @@
   window.handleCompareSlotChange = function(slotIndex, selectEl) {
     const newOrgName = selectEl.value;
     const currentOrg = compareList[slotIndex];
-    if (!newOrgName) {
-      if (currentOrg) {
-        compareList.splice(slotIndex, 1);
-      }
-    } else {
-      if (currentOrg) {
-        compareList.splice(slotIndex, 1, newOrgName);
-      } else {
-        compareList.push(newOrgName);
-      }
+
+    if (newOrgName && compareList.some((name, idx) => idx !== slotIndex && name === newOrgName)) {
+      selectEl.value = currentOrg || '';
+      alert("That organization is already selected in another comparison slot.");
+      return;
     }
-    const unique = [...new Set(compareList)].filter(Boolean);
-    compareList.length = 0;
-    compareList.push(...unique);
+
+    compareList[slotIndex] = newOrgName || null;
+    while (compareList.length && !compareList[compareList.length - 1]) {
+      compareList.pop();
+    }
+
     renderCompare();
     renderCompareModal();
     if (typeof renderOrgs === 'function') renderOrgs(false);
@@ -2595,8 +2599,7 @@
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#39;');
 
-    const selectedOrgs = compareList.map(name => ORGS.find(o => o.name === name)).filter(Boolean);
-    const slots = [0, 1, 2].map(i => selectedOrgs[i] || null);
+    const slots = [0, 1, 2].map(i => ORGS.find(o => o.name === compareList[i]) || null);
 
     const rows = [
       ['Category', org => org.cat],
@@ -2621,7 +2624,7 @@
                 <select class="w-full text-sm border-zinc-200 bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 rounded-md focus:ring-primary focus:border-primary p-2 cursor-pointer font-normal" onchange="window.handleCompareSlotChange(${i}, this)">
                   <option value="">-- Select Org --</option>
                   ${allOrgNames.map(name => `
-                     <option value="${escapeHtml(name)}" ${org && org.name === name ? 'selected' : ''} ${!org && compareList.includes(name) ? 'disabled' : ''}>
+                     <option value="${escapeHtml(name)}" ${org && org.name === name ? 'selected' : ''} ${compareList.some((selectedName, idx) => idx !== i && selectedName === name) ? 'disabled' : ''}>
                        ${escapeHtml(name)}
                      </option>
                   `).join('')}
@@ -2653,7 +2656,7 @@
     document.body.style.overflow = 'hidden';
 
     // Track badge progress only when comparison is actually opened with 2+ orgs
-    if (typeof BadgeSystem !== 'undefined' && compareList.length >= 2) {
+    if (typeof BadgeSystem !== 'undefined' && compareList.filter(Boolean).length >= 2) {
       BadgeSystem.trackComparison();
     }
   }
