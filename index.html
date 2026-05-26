@@ -2681,6 +2681,16 @@
       });
       btn.__orgListenerAttached = true;
     });
+
+    // comparison slot dropdowns
+    (root.querySelectorAll ? root.querySelectorAll('select[data-compare-slot]') : []).forEach(select => {
+      if (select.__orgListenerAttached) return;
+      select.addEventListener('change', (e) => {
+        const slotIndex = parseInt(select.dataset.compareSlot, 10);
+        handleCompareSlotChange(slotIndex, select);
+      });
+      select.__orgListenerAttached = true;
+    });
   }
 
   function toggleCompare(e, name) {
@@ -2689,20 +2699,25 @@
     if (idx > -1) {
       compareList.splice(idx, 1);
     } else {
-      const selectedCount = compareList.filter(Boolean).length;
-      if (selectedCount >= 3) {
+      if (compareList.length >= 3) {
         alert("You can only compare up to 3 organizations at a time.");
         return;
       }
-      const emptySlotIndex = compareList.findIndex(entry => !entry);
-      if (emptySlotIndex >= 0) {
-        compareList[emptySlotIndex] = name;
-      } else {
-        compareList.push(name);
-      }
+      compareList.push(name);
     }
     renderOrgs(true);
     renderCompare();
+    renderCompareModal();
+  }
+
+  function generateCompareOptions(allOrgNames, currentOrgName) {
+    return allOrgNames.map(opt => `
+       <option value="${escapeHtml(opt)}" 
+         ${opt === currentOrgName ? 'selected' : ''} 
+         ${(compareList.includes(opt) && opt !== currentOrgName) ? 'disabled' : ''}>
+         ${escapeHtml(opt)}
+       </option>
+    `).join('');
   }
 
   function renderCompare() {
@@ -2734,11 +2749,9 @@
           <p class="font-bold text-sm truncate w-full text-center">${escapeHtml(org.name)}</p>
           <p class="text-[10px] text-zinc-500 font-label uppercase mt-1 mb-2">${escapeHtml(String(org.years))}y · ${escapeHtml(org.competition)}</p>
           <div class="w-full px-2 mt-auto">
-            <select class="w-full text-[10px] sm:text-xs border-zinc-200 bg-zinc-50 rounded-md focus:ring-primary focus:border-primary p-1 cursor-pointer" onchange="window.handleCompareSlotChange(${i}, this)">
+            <select class="w-full text-[10px] sm:text-xs border-zinc-200 bg-zinc-50 rounded-md focus:ring-primary focus:border-primary p-1 cursor-pointer" data-compare-slot="${i}">
                 <option value="" disabled>Change org...</option>
-                ${allOrgNames.map(opt => `
-                   <option value="${escapeHtml(opt)}" ${opt === name ? 'selected' : (compareList.includes(opt) ? 'disabled' : '')}>${escapeHtml(opt)}</option>
-                `).join('')}
+                ${generateCompareOptions(allOrgNames, name)}
             </select>
           </div>
         `;
@@ -2750,20 +2763,19 @@
           <div class="w-10 h-10 rounded-lg bg-zinc-100 flex items-center justify-center mb-3"><span class="material-symbols-outlined text-zinc-400">add</span></div>
           <p class="text-[10px] text-zinc-400 font-label uppercase mb-2">Slot ${i+1}</p>
           <div class="w-full px-2 mt-auto">
-            <select class="w-full text-xs border-zinc-200 bg-white rounded-md focus:ring-primary focus:border-primary p-1.5 cursor-pointer shadow-sm" onchange="window.handleCompareSlotChange(${i}, this)">
+            <select class="w-full text-xs border-zinc-200 bg-white rounded-md focus:ring-primary focus:border-primary p-1.5 cursor-pointer shadow-sm" data-compare-slot="${i}">
                 <option value="" selected>Search & add...</option>
-                ${allOrgNames.map(opt => `
-                   <option value="${escapeHtml(opt)}" ${compareList.includes(opt) ? 'disabled' : ''}>${escapeHtml(opt)}</option>
-                `).join('')}
+                ${generateCompareOptions(allOrgNames, null)}
             </select>
           </div>
         `;
         container.appendChild(item);
+        attachOrgCardListeners(item);
       }
     }
   }
 
-  window.handleCompareSlotChange = function(slotIndex, selectEl) {
+  function handleCompareSlotChange(slotIndex, selectEl) {
     const newOrgName = selectEl.value;
     const currentOrg = compareList[slotIndex];
 
@@ -2773,15 +2785,17 @@
       return;
     }
 
-    compareList[slotIndex] = newOrgName || null;
-    while (compareList.length && !compareList[compareList.length - 1]) {
-      compareList.pop();
+    if (newOrgName) {
+      compareList[slotIndex] = newOrgName;
+    } else {
+      compareList.splice(slotIndex, 1);
     }
+    compareList = compareList.filter(Boolean);
 
     renderCompare();
     renderCompareModal();
     if (typeof renderOrgs === 'function') renderOrgs(false);
-  };
+  }
 
   function renderCompareModal() {
     const body = document.getElementById('compareModalBody');
@@ -2815,13 +2829,9 @@
             <th class="text-left py-3 px-4 text-xs uppercase tracking-widest text-zinc-400 w-[150px]">Metric</th>
             ${slots.map((org, i) => `
               <th class="text-left py-3 px-4 font-bold w-[250px]">
-                <select class="w-full text-sm border-zinc-200 bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 rounded-md focus:ring-primary focus:border-primary p-2 cursor-pointer font-normal" onchange="window.handleCompareSlotChange(${i}, this)">
+                <select class="w-full text-sm border-zinc-200 bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200 rounded-md focus:ring-primary focus:border-primary p-2 cursor-pointer font-normal" data-compare-slot="${i}">
                   <option value="">-- Select Org --</option>
-                  ${allOrgNames.map(name => `
-                     <option value="${escapeHtml(name)}" ${org && org.name === name ? 'selected' : ''} ${compareList.some((selectedName, idx) => idx !== i && selectedName === name) ? 'disabled' : ''}>
-                       ${escapeHtml(name)}
-                     </option>
-                  `).join('')}
+                  ${generateCompareOptions(allOrgNames, org ? org.name : null)}
                 </select>
               </th>
             `).join('')}
@@ -2841,6 +2851,7 @@
         </tbody>
       </table>
     `;
+    attachOrgCardListeners(body);
   }
 
   function openCompareModal() {
